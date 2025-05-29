@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漢字読み練習アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', 'Inter', sans-serif;
+            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+        }
+        .kanji-display {
+            font-size: 7rem; /* Default large size for Kanji */
+            line-height: 1.2; /* Adjusted for longer strings */
+            text-align: center;
+            margin-bottom: 1rem;
+            color: #333;
+            min-height: 112px; /* Ensure space for Kanji (7rem approx) */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-left: 0.5rem; /* Added padding for longer text */
+            padding-right: 0.5rem;
+            overflow-wrap: break-word; /* Allow breaking long words if necessary */
+            word-break: keep-all; /* Try to keep words together for Japanese */
+        }
+        /* Responsive font size for Kanji */
+        @media (max-width: 768px) { /* md */
+            .kanji-display {
+                font-size: 6rem;
+                min-height: 96px; /* 6rem approx */
+            }
+        }
+        @media (max-width: 640px) { /* sm */
+            .kanji-display {
+                font-size: 4.5rem; /* Further reduced for small screens */
+                min-height: 72px; /* 4.5rem approx */
+            }
+        }
+        .feedback-correct {
+            color: #16a34a; /* green-600 */
+            font-weight: bold;
+        }
+        .feedback-incorrect {
+            color: #dc2626; /* red-600 */
+            font-weight: bold;
+        }
+        .btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .btn:active {
+            transform: translateY(0px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        /* Custom focus style for accessibility */
+        input[type="text"]:focus, button:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5); /* Tailwind blue-500 focus ring */
+        }
+        /* Basic modal style */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-sky-100 to-blue-200 min-h-screen flex flex-col items-center justify-center p-4 selection:bg-sky-300 selection:text-sky-900">
+
+    <div id="app-container" class="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-lg text-gray-700">
+
+        <div id="settings-screen">
+            <h1 class="text-3xl sm:text-4xl font-bold text-center text-sky-600 mb-8">漢字読み練習</h1>
+            <p class="text-center mb-2 text-lg">がくねんを えらんでね！</p>
+            <div class="space-y-4">
+                <button id="grade1-btn" class="btn w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-md">
+                    1年生のかんじ
+                </button>
+                <button id="grade2-btn" class="btn w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-md">
+                    2年生のかんじ
+                </button>
+                <button id="grade-all-btn" class="btn w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-xl shadow-md">
+                    1・2年生ぜんぶ
+                </button>
+            </div>
+        </div>
+
+        <div id="quiz-screen" style="display:none;">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="quiz-title" class="text-2xl font-bold text-sky-700">よみかたクイズ！</h2>
+                <button id="back-to-settings-btn" class="btn bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-3 rounded-md text-sm">
+                    もどる
+                </button>
+            </div>
+            <div id="progress-bar-container" class="w-full bg-gray-200 rounded-full h-2.5 mb-4 dark:bg-gray-700">
+                <div id="progress-bar" class="bg-blue-500 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+            <div id="kanji-display" class="kanji-display select-none"></div>
+            <input type="text" id="reading-input" placeholder="ひらがなで いれてね"
+                   class="w-full p-3 border-2 border-sky-300 rounded-lg text-xl text-center mb-4 focus:border-sky-500 focus:ring-sky-500"
+                   autocorrect="off" autocapitalize="none" spellcheck="false">
+            <button id="check-button" class="btn w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg text-xl mb-2 shadow-md">
+                こたえあわせ
+            </button>
+            <button id="next-button" style="display:none;" class="btn w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-lg text-xl mb-2 shadow-md">
+                つぎへ
+            </button>
+            <div id="feedback-message" class="text-center text-lg min-h-[2.5em] mt-2 mb-2"></div>
+            <div id="score-display" class="text-center text-lg font-semibold text-gray-600"></div>
+        </div>
+
+        <div id="results-screen" style="display:none;">
+            <h2 class="text-3xl font-bold text-center text-sky-600 mb-6">けっか はっぴょう！</h2>
+            <div id="final-score" class="text-center text-5xl font-bold text-yellow-500 mb-4"></div>
+            <div id="final-message" class="text-center text-xl mb-8"></div>
+            <div class="space-y-3">
+                <button id="restart-quiz-btn" class="btn w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-md">
+                    もういちどチャレンジ！
+                </button>
+                <button id="change-grade-btn" class="btn w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg text-lg shadow-md">
+                    がくねんを かえる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-message-modal" class="modal">
+        <div class="modal-content">
+            <p id="modal-text" class="text-lg mb-4"></p>
+            <button id="modal-ok-button" class="btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg">OK</button>
+        </div>
+    </div>
+
+
+    <script>
+        // 漢字データ
+        // display: 表示する文字列 (送り仮名込み)
+        // readings: 正しい読みの配列 (ひらがな)
+        const kanjiData = {
+            g1: [
+                { display: "一", readings: ["いち"] },
+                { display: "右", readings: ["みぎ"] },
+                { display: "雨", readings: ["あめ"] },
+                { display: "円", readings: ["えん"] }, // 「まるい」は形容詞なので別途問題にするか検討
+                { display: "王さま", readings: ["おうさま"] }, // 「王」単体も別途
+                { display: "音", readings: ["おと", "おん"] },
+                { display: "下", readings: ["した", "しも", "もと"] },
+                { display: "下がる", readings: ["さがる"] },
+                { display: "下る", readings: ["くだる"] },
+                { display: "下ろす", readings: ["おろす"] },
+                { display: "火", readings: ["ひ", "か", "ほ"] },
+                { display: "花", readings: ["はな", "か"] },
+                { display: "学ぶ", readings: ["まなぶ"] },
+                { display: "学校", readings: ["がっこう"] }, // 「学」単体も
+                { display: "気", readings: ["き", "け"] }, // 「元気」「天気」は熟語
+                { display: "九", readings: ["きゅう", "く"] },
+                { display: "九つ", readings: ["ここのつ"] },
+                { display: "空", readings: ["そら", "くう"] },
+                { display: "空く", readings: ["あく"] },
+                { display: "空ける", readings: ["あける"] },
+                { display: "犬", readings: ["いぬ", "けん"] },
+                { display: "見る", readings: ["みる"] },
+                { display: "見える", readings: ["みえる"] },
+                { display: "見せる", readings: ["みせる"] },
+                { display: "五", readings: ["ご"] },
+                { display: "五つ", readings: ["いつつ"] },
+                { display: "口", readings: ["くち", "こう", "く"] },
+                { display: "校", readings: ["こう", "きょう"] }, // 「学校」で使用
+                { display: "左", readings: ["ひだり", "さ"] },
+                { display: "三", readings: ["さん", "み"] },
+                { display: "三つ", readings: ["みっつ"] },
+                { display: "山", readings: ["やま", "さん", "せん"] },
+                { display: "子ども", readings: ["こども"] }, // 「子」単体も
+                { display: "四", readings: ["し", "よん"] },
+                { display: "四つ", readings: ["よっつ"] },
+                { display: "糸", readings: ["いと", "し"] },
+                { display: "字", readings: ["じ"] }, // 「文字」は熟語
+                { display: "耳", readings: ["みみ", "じ"] },
+                { display: "七", readings: ["しち", "なな"] },
+                { display: "七つ", readings: ["ななつ"] },
+                { display: "車", readings: ["くるま", "しゃ"] },
+                { display: "手", readings: ["て", "た", "しゅ"] },
+                { display: "十", readings: ["じゅう", "とお", "と"] },
+                { display: "出る", readings: ["でる"] },
+                { display: "出す", readings: ["だす"] },
+                { display: "女", readings: ["おんな", "め", "じょ"] },
+                { display: "小さい", readings: ["ちいさい"] },
+                { display: "小川", readings: ["おがわ"] }, // 「小」単体も
+                { display: "上", readings: ["うえ", "うわ", "かみ", "じょう", "しょう"] },
+                { display: "上がる", readings: ["あがる"] },
+                { display: "上げる", readings: ["あげる"] },
+                { display: "上る", readings: ["のぼる"] },
+                { display: "森", readings: ["もり", "しん"] },
+                { display: "人", readings: ["ひと", "じん", "にん"] },
+                { display: "水", readings: ["みず", "すい"] },
+                { display: "正しい", readings: ["ただしい"] },
+                { display: "正す", readings: ["ただす"] },
+                { display: "生きる", readings: ["いきる"] },
+                { display: "生まれる", readings: ["うまれる"] },
+                { display: "生む", readings: ["うむ"] },
+                { display: "生える", readings: ["はえる"] },
+                { display: "青い", readings: ["あおい"] },
+                { display: "青空", readings: ["あおぞら"] },
+                { display: "石", readings: ["いし", "せき", "こく"] },
+                { display: "赤い", readings: ["あかい"] },
+                { display: "赤らむ", readings: ["あからむ"] },
+                { display: "千", readings: ["ち", "せん"] },
+                { display: "川", readings: ["かわ", "せん"] },
+                { display: "先", readings: ["さき", "せん"] }, // 「先生」は熟語
+                { display: "早い", readings: ["はやい"] },
+                { display: "早まる", readings: ["はやまる"] },
+                { display: "草", readings: ["くさ", "そう"] },
+                { display: "足", readings: ["あし", "そく"] },
+                { display: "足りる", readings: ["たりる"] },
+                { display: "村", readings: ["むら", "そん"] },
+                { display: "大きい", readings: ["おおきい"] },
+                { display: "大人", readings: ["おとな"] },
+                { display: "男", readings: ["おとこ", "だん", "なん"] },
+                { display: "竹", readings: ["たけ", "ちく"] },
+                { display: "中", readings: ["なか", "うち", "ちゅう"] },
+                { display: "虫", readings: ["むし", "ちゅう"] },
+                { display: "町", readings: ["まち", "ちょう"] },
+                { display: "天", readings: ["あめ", "あま", "てん"] }, // 「天気」は熟語
+                { display: "田", readings: ["た", "でん"] },
+                { display: "土", readings: ["つち", "と", "ど"] },
+                { display: "二", readings: ["に", "ふた"] },
+                { display: "二つ", readings: ["ふたつ"] },
+                { display: "日", readings: ["ひ", "か", "にち", "じつ"] }, // 「日曜日」
+                { display: "入る", readings: ["はいる"] },
+                { display: "入れる", readings: ["いれる"] },
+                { display: "年", readings: ["とし", "ねん"] },
+                { display: "白い", readings: ["しろい"] },
+                { display: "白", readings: ["しろ", "はく", "びゃく"] },
+                { display: "八", readings: ["や", "はち"] },
+                { display: "八つ", readings: ["やっつ"] },
+                { display: "百", readings: ["もも", "ひゃく"] },
+                { display: "文", readings: ["ふみ", "ぶん", "もん"] }, // 「文字」
+                { display: "木", readings: ["き", "こ", "もく", "ぼく"] },
+                { display: "本", readings: ["もと", "ほん"] },
+                { display: "名", readings: ["な", "めい", "みょう"] }, // 「名前」
+                { display: "目", readings: ["め", "ま", "もく", "ぼく"] },
+                { display: "立つ", readings: ["たつ"] },
+                { display: "立てる", readings: ["たてる"] },
+                { display: "力", readings: ["ちから", "りき", "りょく"] },
+                { display: "林", readings: ["はやし", "りん"] },
+                { display: "六", readings: ["む", "ろく"] },
+                { display: "六つ", readings: ["むっつ"] },
+                { display: "話す", readings: ["はなす"] },
+                { display: "話", readings: ["はなし", "わ"] }
+            ],
+            g2: [
+                { display: "引く", readings: ["ひく"] },
+                { display: "羽", readings: ["はね", "は", "わ"] },
+                { display: "雲", readings: ["くも", "うん"] },
+                { display: "公園", readings: ["こうえん"] }, // 「園」単体も
+                { display: "遠い", readings: ["とおい"] },
+                { display: "何", readings: ["なに", "なん"] },
+                { display: "科学", readings: ["かがく"] }, //「科」単体も
+                { display: "夏", readings: ["なつ", "か", "げ"] },
+                { display: "家", readings: ["いえ", "うち", "や", "か", "け"] },
+                { display: "歌", readings: ["うた", "か"] },
+                { display: "歌う", readings: ["うたう"] },
+                { display: "画", readings: ["え", "が", "かく"] }, // 「計画」「画家」
+                { display: "回る", readings: ["まわる"] },
+                { display: "回す", readings: ["まわす"] },
+                { display: "一回", readings: ["いっかい"] },
+                { display: "会う", readings: ["あう"] },
+                { display: "会社", readings: ["かいしゃ"] }, // 「会」単体も
+                { display: "海", readings: ["うみ", "かい"] },
+                { display: "絵", readings: ["え", "かい"] },
+                { display: "外", readings: ["そと", "ほか", "がい", "げ"] },
+                { display: "外す", readings: ["はずす"] },
+                { display: "角", readings: ["かど", "つの", "すみ", "かく"] }, // 「三角」
+                { display: "楽しい", readings: ["たのしい"] },
+                { display: "楽しむ", readings: ["たのしむ"] },
+                { display: "音楽", readings: ["おんがく"] }, // 「楽」単体も
+                { display: "活動", readings: ["かつどう"] }, // 「活」単体も
+                { display: "間", readings: ["あいだ", "ま", "かん", "けん"] }, // 「時間」
+                { display: "丸い", readings: ["まるい"] },
+                { display: "丸", readings: ["まる", "がん"] },
+                { display: "岩", readings: ["いわ", "がん"] },
+                { display: "顔", readings: ["かお", "がん"] },
+                { display: "汽車", readings: ["きしゃ"] }, // 「汽」単体も
+                { display: "記す", readings: ["しるす"] },
+                { display: "記事", readings: ["きじ"] }, // 「記」単体も
+                { display: "帰る", readings: ["かえる"] },
+                { display: "弓", readings: ["ゆみ", "きゅう"] },
+                { display: "牛", readings: ["うし", "ぎゅう"] },
+                { display: "魚", readings: ["さかな", "うお", "ぎょ"] },
+                { display: "東京", readings: ["とうきょう"] }, // 「京」単体も
+                { display: "強い", readings: ["つよい"] },
+                { display: "強いる", readings: ["しいる"] },
+                { display: "教える", readings: ["おしえる"] },
+                { display: "教わる", readings: ["おそわる"] },
+                { display: "近い", readings: ["ちかい"] },
+                { display: "兄", readings: ["あに", "けい", "きょう"] },
+                { display: "形", readings: ["かたち", "かた", "なり", "けい", "ぎょう"] },
+                { display: "計る", readings: ["はかる"] },
+                { display: "計算", readings: ["けいさん"] }, // 「計」単体も
+                { display: "元気", readings: ["げんき"] }, // 「元」単体も
+                { display: "草原", readings: ["そうげん"] }, // 「原」単体も
+                { display: "戸", readings: ["と", "こ"] },
+                { display: "古い", readings: ["ふるい"] },
+                { display: "午前", readings: ["ごぜん"] }, // 「午」単体も
+                // ... (以下、同様に2年生の漢字データを整備)
+                { display: "食べる", readings: ["たべる"] },
+                { display: "書く", readings: ["かく"] },
+                { display: "聞く", readings: ["きく"] },
+                { display: "話す", readings: ["はなす"] }, // 1年生にもあるが、2年生のリストにもある想定
+                { display: "歩く", readings: ["あるく"] },
+                { display: "走る", readings: ["はしる"] },
+                { display: "帰る", readings: ["かえる"] },
+                { display: "売る", readings: ["うる"] },
+                { display: "買う", readings: ["かう"] },
+                { display: "読む", readings: ["よむ"] },
+                { display: "作る", readings: ["つくる"] },
+                { display: "使う", readings: ["つかう"] },
+                { display: "知る", readings: ["しる"] },
+                { display: "持つ", readings: ["もつ"] },
+                { display: "切る", readings: ["きる"] },
+                { display: "送る", readings: ["おくる"] },
+                { display: "答える", readings: ["こたえる"] },
+                { display: "始まる", readings: ["はじまる"] },
+                { display: "終わる", readings: ["おわる"] }, // 「終」はリストにないが例として
+                { display: "晴れる", readings: ["はれる"] },
+                { display: "明かり", readings: ["あかり"] },
+                { display: "明るい", readings: ["あかるい"] },
+                { display: "鳴く", readings: ["なく"] },
+                { display: "鳴る", readings: ["なる"] }
+            ]
+        };
+
+        // 1・2年生の漢字を結合し、重複を処理する
+        const allKanji = [];
+        const tempMap = new Map();
+
+        function addOrMergeKanji(kanjiObj) {
+            if (tempMap.has(kanjiObj.display)) {
+                const existingEntry = tempMap.get(kanjiObj.display);
+                kanjiObj.readings.forEach(reading => {
+                    if (!existingEntry.readings.includes(reading)) {
+                        existingEntry.readings.push(reading);
+                    }
+                });
+            } else {
+                // 新しい読みの配列でオブジェクトを作成し、Mapに登録
+                tempMap.set(kanjiObj.display, { ...kanjiObj, readings: [...kanjiObj.readings] });
+            }
+        }
+
+        kanjiData.g1.forEach(addOrMergeKanji);
+        kanjiData.g2.forEach(addOrMergeKanji);
+
+        // Mapから配列に変換
+        tempMap.forEach(value => allKanji.push(value));
+        // console.log(allKanji); // 確認用
+
+        let currentKanjiList = [];
+        let currentKanjiIndex = 0;
+        let score = 0;
+        let currentGradeName = "";
+
+        const settingsScreen = document.getElementById('settings-screen');
+        const quizScreen = document.getElementById('quiz-screen');
+        const resultsScreen = document.getElementById('results-screen');
+
+        const kanjiDisplay = document.getElementById('kanji-display');
+        const readingInput = document.getElementById('reading-input');
+        const checkButton = document.getElementById('check-button');
+        const nextButton = document.getElementById('next-button');
+        const feedbackMessage = document.getElementById('feedback-message');
+        const scoreDisplay = document.getElementById('score-display');
+        const quizTitle = document.getElementById('quiz-title');
+        const progressBar = document.getElementById('progress-bar');
+
+        const finalScoreDisplay = document.getElementById('final-score');
+        const finalMessageDisplay = document.getElementById('final-message');
+
+        const modal = document.getElementById('custom-message-modal');
+        const modalText = document.getElementById('modal-text');
+        const modalOkButton = document.getElementById('modal-ok-button');
+
+        function showModal(message) {
+            modalText.textContent = message;
+            modal.style.display = 'flex';
+        }
+        modalOkButton.onclick = function() {
+            modal.style.display = 'none';
+        }
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function startGame(gradeKanji, gradeName) {
+            currentGradeName = gradeName;
+            currentKanjiList = [...gradeKanji];
+            shuffleArray(currentKanjiList);
+            currentKanjiIndex = 0;
+            score = 0;
+
+            settingsScreen.style.display = 'none';
+            resultsScreen.style.display = 'none';
+            quizScreen.style.display = 'block';
+            quizTitle.textContent = `${gradeName}の よみかたクイズ！`;
+
+            displayNextKanji();
+            updateScoreDisplay();
+            updateProgressBar();
+        }
+
+        function displayNextKanji() {
+            if (currentKanjiIndex < currentKanjiList.length) {
+                const kanjiObj = currentKanjiList[currentKanjiIndex];
+                kanjiDisplay.textContent = kanjiObj.display; // ここを変更
+                readingInput.value = '';
+                feedbackMessage.textContent = '';
+                feedbackMessage.className = 'text-center text-lg min-h-[2.5em] mt-2 mb-2';
+                readingInput.disabled = false;
+                readingInput.focus();
+                checkButton.style.display = 'block';
+                nextButton.style.display = 'none';
+            } else {
+                showResults();
+            }
+        }
+
+        function checkAnswer() {
+            const userInput = readingInput.value.trim();
+            if (!userInput) {
+                showModal("よみがなを いれてくださいね。");
+                return;
+            }
+
+            const kanjiObj = currentKanjiList[currentKanjiIndex];
+            if (kanjiObj.readings.includes(userInput)) {
+                feedbackMessage.textContent = 'せいかい！ 🎉';
+                feedbackMessage.className += ' feedback-correct';
+                score++;
+            } else {
+                const correctAnswerText = kanjiObj.readings.join('」か「');
+                feedbackMessage.textContent = `ざんねん... ただしくは「${correctAnswerText}」だよ。`;
+                feedbackMessage.className += ' feedback-incorrect';
+            }
+            readingInput.disabled = true;
+            checkButton.style.display = 'none';
+            nextButton.style.display = 'block';
+            nextButton.focus();
+            updateScoreDisplay();
+            updateProgressBar();
+        }
+        
+        readingInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                if (checkButton.style.display === 'block') {
+                    checkAnswer();
+                } else if (nextButton.style.display === 'block') {
+                    handleNextButton();
+                }
+            }
+        });
+
+        function handleNextButton() {
+            currentKanjiIndex++;
+            displayNextKanji();
+            updateProgressBar();
+        }
+
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = `もんだい: ${currentKanjiIndex + 1} / ${currentKanjiList.length}  せいかい: ${score}`;
+        }
+        
+        function updateProgressBar() {
+            const progress = (currentKanjiList.length > 0) ? ((currentKanjiIndex) / currentKanjiList.length) * 100 : 0;
+             // currentKanjiIndex が最後まで行くと100%になるように調整
+            progressBar.style.width = `${Math.min(progress, 100)}%`;
+        }
+
+        function showResults() {
+            quizScreen.style.display = 'none';
+            resultsScreen.style.display = 'block';
+            progressBar.style.width = '100%'; // 結果表示時はプログレスバーを100%にする
+            finalScoreDisplay.textContent = `${score} / ${currentKanjiList.length} もん せいかい！`;
+
+            let message = "";
+            const percentage = currentKanjiList.length > 0 ? (score / currentKanjiList.length) * 100 : 0;
+            if (percentage === 100) {
+                message = "すごい！ぜんぶ せいかいだ！かんじマスターだね！🥳";
+            } else if (percentage >= 80) {
+                message = "よくできました！もうすこしで かんぺきだ！😊";
+            } else if (percentage >= 50) {
+                message = "がんばったね！つぎは もっと せいかいできるよ！👍";
+            } else {
+                message = "おつかれさま！また チャレンジしてね！💪";
+            }
+            finalMessageDisplay.textContent = message;
+        }
+
+        document.getElementById('grade1-btn').addEventListener('click', () => startGame(kanjiData.g1, '1年生'));
+        document.getElementById('grade2-btn').addEventListener('click', () => startGame(kanjiData.g2, '2年生'));
+        document.getElementById('grade-all-btn').addEventListener('click', () => startGame(allKanji, '1・2年生ぜんぶ'));
+        
+        document.getElementById('back-to-settings-btn').addEventListener('click', () => {
+            quizScreen.style.display = 'none';
+            resultsScreen.style.display = 'none';
+            settingsScreen.style.display = 'block';
+            progressBar.style.width = '0%'; // 設定画面に戻るときプログレスバーをリセット
+        });
+
+        checkButton.addEventListener('click', checkAnswer);
+        nextButton.addEventListener('click', handleNextButton);
+
+        document.getElementById('restart-quiz-btn').addEventListener('click', () => {
+            let gradeToRestart;
+            if (currentGradeName === '1年生') gradeToRestart = kanjiData.g1;
+            else if (currentGradeName === '2年生') gradeToRestart = kanjiData.g2;
+            else gradeToRestart = allKanji;
+            startGame(gradeToRestart, currentGradeName);
+        });
+
+        document.getElementById('change-grade-btn').addEventListener('click', () => {
+            resultsScreen.style.display = 'none';
+            settingsScreen.style.display = 'block';
+            progressBar.style.width = '0%'; // 設定画面に戻るときプログレスバーをリセット
+        });
+
+    </script>
+</body>
+</html>
